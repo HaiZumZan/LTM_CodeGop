@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="vi" class="h-full bg-gray-900">
+<head>
+    <meta charset="UTF-8">
+    <title>Viewer - Xem màn hình</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; background: #1f2937; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+        .mirror { transform: scaleX(-1); }
+        #senderCamContainer { transition: opacity 0.3s ease-in-out; }
+    </style>
+</head>
+<body class="flex flex-col h-full text-white bg-black overflow-hidden">
+<header class="bg-gray-800 p-3 flex justify-between items-center shadow-md shrink-0 border-b border-gray-700 z-50">
+    <div class="flex items-center gap-2">
+        <span class="bg-green-700 px-2 py-0.5 rounded text-xs border border-green-600 font-bold">VIEWER</span>
+        <span>Bạn: <span id="myName" class="font-bold text-green-400">...</span></span>
+    </div>
+    <div class="flex gap-2">
+        <button onclick="toggleMic()" id="myMicBtn" class="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm font-bold border border-gray-600 transition flex items-center gap-1">
+            🎤 <span>Bật Mic</span>
+        </button>
+        <button onclick="toggleCam()" id="myCamBtn" class="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm font-bold border border-gray-600 transition flex items-center gap-1">
+            📷 <span>Bật Cam</span>
+        </button>
+        <div class="w-[1px] h-6 bg-gray-600 mx-1 self-center"></div>
+
+        <button onclick="requestShare()" class="bg-yellow-600 hover:bg-yellow-500 px-3 py-1 rounded text-sm font-bold shadow transition flex items-center gap-1">
+            ✋ <span>Xin chia sẻ</span>
+        </button>
+
+        <button onclick="exitRoom()" class="bg-red-600 hover:bg-red-500 px-3 py-1 rounded text-sm font-bold shadow transition">
+            🚪 Thoát
+        </button>
+    </div>
+</header>
+
+<div class="flex flex-1 overflow-hidden relative">
+    <div class="flex-1 relative flex items-center justify-center bg-black group w-full h-full">
+
+        <video id="remoteScreen" autoplay playsinline class="max-w-full max-h-full object-contain w-full h-full"></video>
+
+        <div id="senderCamContainer" class="absolute top-4 right-4 w-48 h-36 bg-gray-900 border-2 border-blue-500 rounded-lg shadow-2xl hidden z-40 overflow-hidden flex flex-col group/cam">
+            <video id="senderCam" autoplay playsinline class="w-full h-full object-cover"></video>
+            <div class="absolute bottom-0 w-full bg-blue-900/80 text-[10px] text-center py-0.5 text-white font-bold">Sender Camera</div>
+        </div>
+
+        <div id="myPreviewContainer" class="absolute bottom-4 left-4 w-40 h-30 bg-gray-900 border-2 border-green-500 rounded-lg shadow-lg hidden z-40 overflow-hidden">
+            <video id="myPreview" autoplay playsinline muted class="w-full h-full object-cover mirror"></video>
+            <div class="absolute bottom-0 w-full bg-black/60 text-[10px] text-center py-0.5 text-white">Bạn</div>
+        </div>
+
+        <div id="status" class="absolute inset-0 flex items-center justify-center bg-gray-900/90 z-20 transition-opacity duration-300">
+            <div class="text-center">
+                <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-white mx-auto mb-4 opacity-50"></div>
+                <p id="statusText" class="text-xl text-gray-400 font-light tracking-wide animate-pulse">Đang chờ tín hiệu từ Sender...</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="w-72 bg-gray-800 border-l border-gray-700 flex flex-col shrink-0 z-50 shadow-xl">
+        <div class="flex-1 flex flex-col min-h-0">
+            <div class="p-3 font-bold text-gray-300 text-sm bg-gray-900 shadow-sm border-b border-gray-700">💬 Trò chuyện</div>
+            <div id="chatBox" class="flex-1 overflow-y-auto p-3 space-y-3 text-sm flex flex-col-reverse custom-scrollbar bg-gray-800"></div>
+            <form onsubmit="sendChat(event)" class="p-3 border-t border-gray-700 flex gap-2 bg-gray-900">
+                <input id="chatInput" class="flex-1 bg-gray-700 rounded px-3 py-2 outline-none border border-gray-600 text-white focus:border-blue-500 transition" placeholder="Nhập tin nhắn...">
+                <button class="bg-blue-600 hover:bg-blue-500 px-3 py-2 rounded font-bold text-white transition">Gửi</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    const WS_URL = localStorage.getItem("ws_url");
+    const query = new URLSearchParams(window.location.search);
+    const room = query.get("room");
+    const username = query.get("user");
+    const myId = "v_" + Math.random().toString(36).substr(2,6);
+
+    document.getElementById('myName').textContent = username;
+
+    let ws = new WebSocket(WS_URL);
+    let pc = null;
+    let localStream = new MediaStream();
+    let isMicOn = false;
+    let isCamOn = false;
+
+    ws.onopen = () => {
+        ws.send(JSON.stringify({ type: "join", room, id: myId, username }));
+    };
+
+    ws.onmessage = async (msg) => {
+        const data = JSON.parse(msg.data);
+
+        // --- XỬ LÝ SWAP (NHẬN QUYỀN SENDER) ---
+        if (data.type === "grant_share") {
+            cleanup();
+            ws.close();
+            window.location.href = `share.html?room=${encodeURIComponent(room)}&user=${encodeURIComponent(username)}`;
+            return;
+        }
+
+        if (data.type === "force_logout") {
+            alert(data.reason); ws.close(); window.location.href = "index.html"; return;
+        }
+
+        // Sender thoát -> hiện thông báo
+        if (data.type === "stop_share" || (data.type === "user_left" && data.id === "sender")) {
+            cleanup();
+            updateStatus("Sender đã dừng chia sẻ hoặc đổi vai.", true);
+            return;
+        }
+
+        // Phát hiện Sender mới vào (do quá trình Swap hoặc mới vào)
+        if (data.type === "join" && data.id === "sender") {
+             updateStatus("Đang kết nối với Sender...", true);
+        }
+
+        if (data.type === "offer") handleOffer(data.offer);
+        if (data.type === "answer" && pc) {
+            try { await pc.setRemoteDescription(data.answer); } catch(e) { console.warn(e); }
+        }
+        if (data.type === "candidate" && pc) {
+            try { await pc.addIceCandidate(data.candidate); } catch(e) { console.log(e); }
+        }
+        if (data.type === "chat") addChat(data.username, data.content, false);
+    };
+
+    function requestShare() {
+        if(confirm("Bạn muốn xin quyền chia sẻ màn hình?")) {
+            ws.send(JSON.stringify({ type: "request_share", room, requesterId: myId, username }));
+            alert("Đã gửi yêu cầu! Đợi Sender đồng ý.");
+        }
+    }
+
+    async function handleOffer(offer) {
+        if(pc) { pc.close(); pc=null; } // Reset nếu đang có kết nối cũ
+        createPeerConnection();
+        await pc.setRemoteDescription(offer);
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        // Gửi trả answer CHỈ cho Sender (target: "sender")
+        ws.send(JSON.stringify({type:'answer', answer, room, id:myId, target: "sender"}));
+    }
+
+    function createPeerConnection() {
+        pc = new RTCPeerConnection({
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:global.stun.twilio.com:3478' }
+            ]
+        });
+
+        pc.ontrack = ev => {
+            const track = ev.track;
+            const inboundStream = new MediaStream([track]);
+
+            if (track.kind === 'video') {
+                const settings = track.getSettings();
+                const isSmallVideo = (settings.height && settings.height <= 480);
+                const mainScreen = document.getElementById('remoteScreen');
+                const hasMainVideo = mainScreen.srcObject && mainScreen.srcObject.getVideoTracks().length > 0;
+
+                if (isSmallVideo || hasMainVideo) {
+                    // Đây là Camera Sender
+                    const camVideo = document.getElementById('senderCam');
+                    camVideo.srcObject = inboundStream;
+                    document.getElementById('senderCamContainer').classList.remove('hidden');
+
+                    track.onended = () => {
+                        document.getElementById('senderCamContainer').classList.add('hidden');
+                        camVideo.srcObject = null;
+                    };
+                } else {
+                    // Đây là Screen Share chính
+                    mainScreen.srcObject = inboundStream;
+                    updateStatus("", false); // Ẩn loading
+
+                    track.onended = () => {
+                         mainScreen.srcObject = null;
+                         updateStatus("Sender tạm dừng chia sẻ.", true);
+                    };
+                }
+            }
+
+            if (track.kind === 'audio') {
+                if (document.getElementById('remoteScreen').srcObject) {
+                     document.getElementById('remoteScreen').srcObject.addTrack(track);
+                } else {
+                     document.getElementById('remoteScreen').srcObject = inboundStream;
+                }
+            }
+        };
+
+        pc.onicecandidate = e => {
+            // Gửi Candidate CHỈ cho Sender
+            if(e.candidate) ws.send(JSON.stringify({type:'candidate', candidate:e.candidate, room, id:myId, target: "sender"}));
+        };
+
+        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+    }
+
+    async function updateMediaTracks() {
+        if (!pc) return;
+        const senders = pc.getSenders();
+        senders.forEach(sender => pc.removeTrack(sender));
+        localStream.getTracks().forEach(track => {
+            if (track.readyState === 'live') pc.addTrack(track, localStream);
+        });
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        ws.send(JSON.stringify({type: 'offer', offer: offer, room, id: myId, target: "sender"}));
+    }
+
+    async function toggleMic() {
+        const btn = document.getElementById('myMicBtn');
+        if (!isMicOn) {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                localStream.addTrack(stream.getAudioTracks()[0]);
+                isMicOn = true;
+                btn.classList.replace('bg-gray-700', 'bg-red-600');
+                btn.innerHTML = `🎤 <span>Tắt Mic</span>`;
+                updateMediaTracks();
+            } catch (e) { alert("Lỗi Mic: " + e.message); }
+        } else {
+            localStream.getAudioTracks().forEach(t => { t.stop(); localStream.removeTrack(t); });
+            isMicOn = false;
+            btn.classList.replace('bg-red-600', 'bg-gray-700');
+            btn.innerHTML = `🎤 <span>Bật Mic</span>`;
+            updateMediaTracks();
+        }
+    }
+
+    async function toggleCam() {
+        const btn = document.getElementById('myCamBtn');
+        const container = document.getElementById('myPreviewContainer');
+        const preview = document.getElementById('myPreview');
+
+        if (!isCamOn) {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 } });
+                const track = stream.getVideoTracks()[0];
+                localStream.addTrack(track);
+                preview.srcObject = new MediaStream([track]);
+                container.classList.remove('hidden');
+                isCamOn = true;
+                btn.classList.replace('bg-gray-700', 'bg-red-600');
+                btn.innerHTML = `📷 <span>Tắt Cam</span>`;
+                updateMediaTracks();
+            } catch (e) { alert("Lỗi Cam: " + e.message); }
+        } else {
+            localStream.getVideoTracks().forEach(t => { t.stop(); localStream.removeTrack(t); });
+            preview.srcObject = null;
+            container.classList.add('hidden');
+            isCamOn = false;
+            btn.classList.replace('bg-red-600', 'bg-gray-700');
+            btn.innerHTML = `📷 <span>Bật Cam</span>`;
+            updateMediaTracks();
+        }
+    }
+
+    function updateStatus(text, show) {
+        const st = document.getElementById('status');
+        const txt = document.getElementById('statusText');
+        txt.textContent = text;
+        if (show) st.classList.remove('hidden'); else st.classList.add('hidden');
+    }
+
+    function cleanup() {
+        if(pc) { pc.close(); pc = null; }
+        document.getElementById('remoteScreen').srcObject = null;
+        document.getElementById('senderCam').srcObject = null;
+        document.getElementById('senderCamContainer').classList.add('hidden');
+        localStream.getTracks().forEach(t => t.stop());
+    }
+
+    function sendChat(e) {
+        e.preventDefault(); const txt = document.getElementById('chatInput').value;
+        if(txt) { ws.send(JSON.stringify({type:"chat", room, username, content:txt})); addChat("Tôi", txt, true); document.getElementById('chatInput').value = ""; }
+    }
+    function addChat(user, txt, isMe) {
+        const box = document.getElementById('chatBox');
+        box.innerHTML = `<div class="flex flex-col ${isMe?'items-end':'items-start'} mb-3 animate-fade-in-up"><span class="text-[10px] text-gray-400 mb-0.5 ml-1">${user}</span><div class="${isMe?'bg-blue-600 text-white':'bg-gray-700 text-gray-200'} px-3 py-2 rounded-2xl text-sm max-w-[90%] break-words shadow-md border ${isMe?'border-blue-500':'border-gray-600'}">${txt}</div></div>` + box.innerHTML;
+    }
+    function exitRoom() { if(confirm("Bạn có chắc muốn thoát?")) { cleanup(); ws.close(); window.location.href="index.html"; } }
+</script>
+</body>
+</html>

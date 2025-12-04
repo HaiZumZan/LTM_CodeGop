@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="vi" class="h-full bg-gray-900">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard - P2P Share</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0px); } }
+        .float-anim { animation: float 3s ease-in-out infinite; }
+    </style>
+</head>
+<body class="h-full flex flex-col items-center justify-center text-white p-6 relative bg-gradient-to-br from-gray-900 via-gray-800 to-black">
+
+<div class="absolute top-6 right-6 flex gap-3 animate-fade-in">
+    <button onclick="openProfile()" class="text-gray-300 hover:text-blue-400 text-sm font-bold border border-gray-600 px-4 py-2 rounded-lg transition hover:bg-gray-800">👤 Hồ sơ</button>
+    <button onclick="logout()" class="text-gray-300 hover:text-red-400 text-sm font-bold border border-gray-600 px-4 py-2 rounded-lg transition hover:bg-gray-800">Đăng xuất</button>
+</div>
+
+<div class="bg-gray-800/80 backdrop-blur-md p-10 rounded-3xl shadow-2xl max-w-md w-full text-center relative border border-gray-700 float-anim">
+    <div class="absolute -top-10 left-1/2 transform -translate-x-1/2 bg-blue-600 p-4 rounded-full shadow-lg border-4 border-gray-900">
+        <span class="text-3xl">🚀</span>
+    </div>
+
+    <h2 class="text-lg text-gray-400 mt-6 mb-1">Xin chào,</h2>
+    <h1 id="display-name" class="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500 mb-6 truncate">...</h1>
+
+    <div id="status" class="text-xs text-gray-500 mb-8 flex items-center justify-center gap-2 bg-gray-900/50 py-2 rounded-full w-fit mx-auto px-4">
+        <span class="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-blue-400 opacity-75"></span>
+        <span class="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+        <span id="connStatus">Đang kết nối Server...</span>
+    </div>
+
+    <div class="mb-6 text-left">
+        <label class="text-xs text-gray-400 font-bold ml-1 uppercase tracking-wide">Tên phòng</label>
+        <input type="text" id="room" value="Phong1" class="w-full p-4 bg-gray-900/80 rounded-xl text-white mt-2 border border-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-900 outline-none transition font-mono text-lg text-center">
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+        <button onclick="join('share')" class="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 py-4 rounded-xl font-bold transition shadow-lg flex flex-col items-center justify-center gap-1 transform hover:scale-105 group">
+            <span class="text-2xl group-hover:-translate-y-1 transition">📤</span>
+            <span>Chia sẻ (Sender)</span>
+        </button>
+        <button onclick="join('view')" class="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 py-4 rounded-xl font-bold transition shadow-lg flex flex-col items-center justify-center gap-1 transform hover:scale-105 group">
+            <span class="text-2xl group-hover:-translate-y-1 transition">👁️</span>
+            <span>Xem (Viewer)</span>
+        </button>
+    </div>
+</div>
+
+<div id="profileModal" class="fixed inset-0 bg-black/90 hidden z-50 flex items-center justify-center backdrop-blur-sm">
+    <div class="bg-gray-800 p-6 rounded-2xl w-96 shadow-2xl border border-gray-600 transform transition-all scale-100">
+        <h2 class="text-xl font-bold mb-4 text-white text-center">Cài đặt tài khoản</h2>
+
+        <div class="flex border-b border-gray-700 mb-4">
+            <button onclick="switchTab('name')" id="tabName" class="flex-1 py-2 text-sm font-bold text-blue-400 border-b-2 border-blue-500 transition">Đổi Tên</button>
+            <button onclick="switchTab('pass')" id="tabPass" class="flex-1 py-2 text-sm font-bold text-gray-500 hover:text-gray-300 transition">Đổi Mật Khẩu</button>
+        </div>
+
+        <div id="formName" class="animate-fade-in">
+            <label class="text-xs text-gray-400">Tên hiện tại: <span id="currentNameModal" class="text-white font-bold"></span></label>
+            <input id="newNameInput" type="text" placeholder="Nhập tên mới..." class="w-full mt-3 p-3 bg-gray-700 rounded-lg border border-gray-600 text-sm outline-none focus:border-blue-500">
+            <input id="confirmPassName" type="password" placeholder="Mật khẩu xác nhận" class="w-full mt-3 p-3 bg-gray-700 rounded-lg border border-gray-600 text-sm outline-none focus:border-blue-500">
+            <button onclick="changeName()" class="w-full mt-5 bg-blue-600 hover:bg-blue-500 py-2.5 rounded-lg font-bold text-sm transition">Lưu thay đổi</button>
+        </div>
+
+        <div id="formPass" class="hidden animate-fade-in">
+            <input id="oldPassInput" type="password" placeholder="Mật khẩu cũ" class="w-full mt-3 p-3 bg-gray-700 rounded-lg border border-gray-600 text-sm outline-none focus:border-yellow-500">
+            <input id="newPassInput" type="password" placeholder="Mật khẩu mới" class="w-full mt-3 p-3 bg-gray-700 rounded-lg border border-gray-600 text-sm outline-none focus:border-yellow-500">
+            <button onclick="changePass()" class="w-full mt-5 bg-yellow-600 hover:bg-yellow-500 py-2.5 rounded-lg font-bold text-sm transition">Cập nhật mật khẩu</button>
+        </div>
+
+        <button onclick="closeProfile()" class="mt-4 w-full text-gray-400 text-xs hover:text-white py-2">Đóng</button>
+    </div>
+</div>
+
+<script>
+    let username = localStorage.getItem("username");
+    const WS_URL = localStorage.getItem("ws_url");
+
+    if (!username || !WS_URL) window.location.href = "login.html";
+
+    document.getElementById("display-name").textContent = username;
+    document.getElementById("currentNameModal").textContent = username;
+
+    const ws = new WebSocket(WS_URL);
+
+    ws.onopen = () => {
+        document.getElementById("connStatus").textContent = "Đã kết nối Server";
+        document.getElementById("connStatus").className = "text-green-400 font-bold";
+        ws.send(JSON.stringify({ type: "login", username: username, password: "KEEP_ALIVE_SESSION" }));
+    };
+
+    ws.onmessage = (msg) => {
+        const data = JSON.parse(msg.data);
+        if (data.type === "force_logout") { alert(data.reason); logout(); }
+        else if (data.type === "change_name_success") {
+            alert("Đổi tên thành công!");
+            localStorage.setItem("username", data.newName);
+            username = data.newName;
+            document.getElementById("display-name").textContent = username;
+            document.getElementById("currentNameModal").textContent = username;
+            closeProfile();
+        }
+        else if (data.type === "change_pass_success") { alert("Đổi mật khẩu thành công!"); closeProfile(); }
+        else if (data.type.includes("fail")) { alert("Lỗi: " + data.reason); }
+    };
+
+    ws.onerror = () => {
+        document.getElementById("connStatus").textContent = "Mất kết nối!";
+        document.getElementById("connStatus").className = "text-red-500 font-bold";
+    };
+
+    function logout() { localStorage.clear(); window.location.href = "login.html"; }
+
+    function join(role) {
+        const room = document.getElementById('room').value;
+        if(!room) return alert("Vui lòng nhập tên phòng");
+        window.location.href = `${role}.html?room=${encodeURIComponent(room)}&user=${encodeURIComponent(username)}`;
+    }
+
+    // Modal Logic
+    function openProfile() { document.getElementById('profileModal').classList.remove('hidden'); }
+    function closeProfile() {
+        document.getElementById('profileModal').classList.add('hidden');
+        document.querySelectorAll('input').forEach(i => i.value = '');
+    }
+    function switchTab(tab) {
+        if(tab === 'name') {
+            document.getElementById('tabName').className = "flex-1 py-2 text-sm font-bold text-blue-400 border-b-2 border-blue-500 transition";
+            document.getElementById('tabPass').className = "flex-1 py-2 text-sm font-bold text-gray-500 hover:text-gray-300 transition";
+            document.getElementById('formName').classList.remove('hidden');
+            document.getElementById('formPass').classList.add('hidden');
+        } else {
+            document.getElementById('tabPass').className = "flex-1 py-2 text-sm font-bold text-yellow-500 border-b-2 border-yellow-500 transition";
+            document.getElementById('tabName').className = "flex-1 py-2 text-sm font-bold text-gray-500 hover:text-gray-300 transition";
+            document.getElementById('formPass').classList.remove('hidden');
+            document.getElementById('formName').classList.add('hidden');
+        }
+    }
+    function changePass() {
+        ws.send(JSON.stringify({ type: "change_pass", username, oldPass: document.getElementById('oldPassInput').value, newPass: document.getElementById('newPassInput').value }));
+    }
+    function changeName() {
+        ws.send(JSON.stringify({ type: "change_name", username, password: document.getElementById('confirmPassName').value, newName: document.getElementById('newNameInput').value }));
+    }
+</script>
+</body>
+</html>

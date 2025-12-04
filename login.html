@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="vi" class="h-full bg-gray-900">
+<head>
+    <meta charset="UTF-8">
+    <title>Đăng nhập - P2P Share</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="h-full flex items-center justify-center p-6 bg-gradient-to-tr from-gray-900 to-black">
+<div class="bg-gray-800 p-8 rounded-2xl shadow-2xl w-full max-w-sm border border-gray-700">
+    <h2 class="text-3xl font-bold text-white text-center mb-2">Welcome Back</h2>
+    <p class="text-center text-gray-500 text-sm mb-6">Đăng nhập để chia sẻ màn hình</p>
+
+    <div id="msg" class="text-center text-xs mb-4 h-4 text-red-400 font-bold transition-all"></div>
+
+    <div class="space-y-4">
+        <div>
+            <label class="text-xs text-gray-400 ml-1 font-bold">SERVER IP</label>
+            <input type="text" id="serverIp" value="localhost:3001" class="w-full p-3 bg-gray-900 rounded-lg text-white border border-gray-600 focus:border-blue-500 outline-none text-sm font-mono text-center">
+        </div>
+
+        <div class="relative">
+            <input type="text" id="user" placeholder="Tên đăng nhập" class="w-full p-3 bg-gray-700 rounded-lg text-white border border-gray-600 focus:border-blue-500 outline-none pl-10">
+            <span class="absolute left-3 top-3 text-gray-400">👤</span>
+        </div>
+
+        <div class="relative">
+            <input type="password" id="pass" placeholder="Mật khẩu" class="w-full p-3 bg-gray-700 rounded-lg text-white border border-gray-600 focus:border-blue-500 outline-none pl-10">
+            <span class="absolute left-3 top-3 text-gray-400">🔒</span>
+        </div>
+
+        <button onclick="sendAuth('login')" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg transition shadow-lg mt-2">ĐĂNG NHẬP</button>
+        <button onclick="sendAuth('register')" class="w-full bg-transparent hover:bg-gray-700 text-gray-400 font-bold py-2 rounded-lg transition border border-gray-600 text-sm">Đăng ký mới</button>
+    </div>
+</div>
+<script>
+    let ws = null;
+
+    function connectWs() {
+        const ip = document.getElementById('serverIp').value;
+        const url = `ws://${ip}`;
+        if(ws) ws.close();
+
+        try {
+            ws = new WebSocket(url);
+            ws.onopen = () => {
+                document.getElementById('msg').textContent = "● Đã kết nối Server";
+                document.getElementById('msg').className = "text-center text-xs mb-4 h-4 text-green-500 font-bold";
+            };
+            ws.onerror = () => {
+                document.getElementById('msg').textContent = "Không thể kết nối Server!";
+                document.getElementById('msg').className = "text-center text-xs mb-4 h-4 text-red-500 font-bold";
+            };
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                const msgEl = document.getElementById('msg');
+
+                if (data.type === "login_success") {
+                    localStorage.setItem("username", data.username);
+                    localStorage.setItem("ws_url", `ws://${document.getElementById('serverIp').value}`);
+                    window.location.href = "index.html";
+                }
+                else if (data.type === "force_logout") { alert(data.reason); ws.close(); }
+                else if (data.type === "register_success") {
+                    msgEl.textContent = "Đăng ký thành công! Hãy đăng nhập.";
+                    msgEl.className = "text-center text-xs mb-4 h-4 text-green-400 font-bold";
+                }
+                else if (data.type.includes("fail")) {
+                    msgEl.textContent = data.reason || "Thất bại!";
+                    msgEl.className = "text-center text-xs mb-4 h-4 text-red-400 font-bold";
+                }
+            };
+        } catch(e) { console.error(e); }
+    }
+
+    document.addEventListener("DOMContentLoaded", connectWs);
+    document.getElementById('serverIp').addEventListener('change', connectWs);
+
+    function sendAuth(type) {
+        if(!ws || ws.readyState !== WebSocket.OPEN) { alert("Chưa kết nối Server!"); connectWs(); return; }
+        const user = document.getElementById('user').value;
+        const pass = document.getElementById('pass').value;
+        if (!user || !pass) return alert("Vui lòng nhập đủ thông tin");
+        ws.send(JSON.stringify({ type: type, username: user, password: pass }));
+    }
+</script>
+</body>
+</html>
